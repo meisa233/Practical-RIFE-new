@@ -10,7 +10,7 @@ import _thread
 import skvideo.io
 from queue import Queue, Empty
 from model.pytorch_msssim import ssim_matlab
-
+import traceback
 warnings.filterwarnings("ignore")
 
 def transferAudio(sourceVideo, targetVideo):
@@ -68,7 +68,7 @@ parser.add_argument('--png', dest='png', action='store_true', help='whether to v
 parser.add_argument('--ext', dest='ext', type=str, default='mp4', help='vid_out video extension')
 parser.add_argument('--exp', dest='exp', type=int, default=1)
 parser.add_argument('--multi', dest='multi', type=int, default=2)
-
+parser.add_argument('--gpu_n', dest='gpu_n', type=int, default=0)
 args = parser.parse_args()
 if args.exp != 1:
     args.multi = (2 ** args.exp)
@@ -81,7 +81,7 @@ assert args.scale in [0.25, 0.5, 1.0, 2.0, 4.0]
 if not args.img is None:
     args.png = True
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device(f"cuda:{args.gpu_n}" if torch.cuda.is_available() else "cpu")
 torch.set_grad_enabled(False)
 if torch.cuda.is_available():
     torch.backends.cudnn.enabled = True
@@ -92,14 +92,15 @@ if torch.cuda.is_available():
 try:
     from train_log.RIFE_HDv3 import Model
 except:
+    traceback.print_exc()
     print("Please download our model from model list")
-model = Model()
+model = Model(gpu_n=args.gpu_n)
 if not hasattr(model, 'version'):
     model.version = 0
 model.load_model(args.modelDir, -1)
 print("Loaded 3.x/4.x HD model.")
 model.eval()
-model.device()
+model.device(gpu_n=args.gpu_n)
 
 if not args.video is None:
     videoCapture = cv2.VideoCapture(args.video)
