@@ -5,7 +5,7 @@ import torch.nn as nn
 backwarp_tenGrid = {}
 
 
-def warp(tenInput, tenFlow, device):
+def warp(tenInput, tenFlow, device, mac=False):
     k = (str(tenFlow.device), str(tenFlow.size()))
     if k not in backwarp_tenGrid:
         tenHorizontal = torch.linspace(-1.0, 1.0, tenFlow.shape[3], device=device).view(
@@ -19,4 +19,8 @@ def warp(tenInput, tenFlow, device):
                          tenFlow[:, 1:2, :, :] / ((tenInput.shape[2] - 1.0) / 2.0)], 1)
 
     g = (backwarp_tenGrid[k] + tenFlow).permute(0, 2, 3, 1)
-    return torch.nn.functional.grid_sample(input=tenInput, grid=g, mode='bilinear', padding_mode='border', align_corners=True)
+    if mac:
+        return torch.nn.functional.grid_sample(input=tenInput, grid=g, mode='bilinear', padding_mode='reflection', align_corners=True)
+    else:
+        return torch.nn.functional.grid_sample(input=tenInput, grid=g, mode='bilinear', padding_mode='border',
+                                               align_corners=True)

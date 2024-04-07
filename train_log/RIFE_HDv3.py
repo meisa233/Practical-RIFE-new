@@ -13,9 +13,9 @@ from model.loss import *
 #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
 class Model:
-    def __init__(self, local_rank=-1, gpu_n=0):
-        self.flownet = IFNet(gpu_n=gpu_n)
-        self.device(gpu_n=gpu_n)
+    def __init__(self, local_rank=-1, gpu_n=0, mac=False):
+        self.flownet = IFNet(gpu_n=gpu_n, mac=mac)
+        self.device(gpu_n=gpu_n, mac=mac)
         self.optimG = AdamW(self.flownet.parameters(), lr=1e-6, weight_decay=1e-4)
         self.epe = EPE()
         self.version = 4.8
@@ -30,8 +30,11 @@ class Model:
     def eval(self):
         self.flownet.eval()
 
-    def device(self, gpu_n=0):
-        device = torch.device(f"cuda:{gpu_n}" if torch.cuda.is_available() else "cpu")
+    def device(self, gpu_n=0, mac=False):
+        if mac:
+            device = torch.device("mps")
+        else:
+            device = torch.device(f"cuda:{gpu_n}" if torch.cuda.is_available() else "cpu")
         self.flownet.to(device)
 
     def load_model(self, path, rank=0):

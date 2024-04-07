@@ -69,6 +69,7 @@ parser.add_argument('--ext', dest='ext', type=str, default='mp4', help='vid_out 
 parser.add_argument('--exp', dest='exp', type=int, default=1)
 parser.add_argument('--multi', dest='multi', type=int, default=2)
 parser.add_argument('--gpu_n', dest='gpu_n', type=int, default=0)
+parser.add_argument('--mac', action='store_true')
 args = parser.parse_args()
 if args.exp != 1:
     args.multi = (2 ** args.exp)
@@ -80,8 +81,10 @@ if args.UHD and args.scale==1.0:
 assert args.scale in [0.25, 0.5, 1.0, 2.0, 4.0]
 if not args.img is None:
     args.png = True
-
-device = torch.device(f"cuda:{args.gpu_n}" if torch.cuda.is_available() else "cpu")
+if args.mac:
+    device = torch.device("mps")
+else:
+    device = torch.device(f"cuda:{args.gpu_n}" if torch.cuda.is_available() else "cpu")
 torch.set_grad_enabled(False)
 if torch.cuda.is_available():
     torch.backends.cudnn.enabled = True
@@ -94,13 +97,13 @@ try:
 except:
     traceback.print_exc()
     print("Please download our model from model list")
-model = Model(gpu_n=args.gpu_n)
+model = Model(gpu_n=args.gpu_n, mac=args.mac)
 if not hasattr(model, 'version'):
     model.version = 0
 model.load_model(args.modelDir, -1)
 print("Loaded 3.x/4.x HD model.")
 model.eval()
-model.device(gpu_n=args.gpu_n)
+model.device(gpu_n=args.gpu_n, mac=args.mac)
 
 if not args.video is None:
     videoCapture = cv2.VideoCapture(args.video)

@@ -90,7 +90,7 @@ class IFBlock(nn.Module):
         return flow, mask
         
 class IFNet(nn.Module):
-    def __init__(self, gpu_n=0):
+    def __init__(self, gpu_n=0, mac=False):
         super(IFNet, self).__init__()
         self.block0 = IFBlock(7+16, c=192)
         self.block1 = IFBlock(8+4+16, c=128)
@@ -98,6 +98,11 @@ class IFNet(nn.Module):
         self.block3 = IFBlock(8+4+16, c=64)
         self.encode = Head()
         self.gpu_n = gpu_n
+        self.mac = mac
+        if mac:
+            self.device = torch.device("mps")
+        else:
+            self.device = torch.device(f"cuda:{self.gpu_n}" if torch.cuda.is_available() else "cpu")
         # self.contextnet = Contextnet()
         # self.unet = Unet()
 
@@ -129,8 +134,8 @@ class IFNet(nn.Module):
                     flow = (flow + torch.cat((f_[:, 2:4], f_[:, :2]), 1)) / 2
                     mask = (mask + (-m_)) / 2
             else:
-                wf0 = warp(f0, flow[:, :2], self.gpu_n)
-                wf1 = warp(f1, flow[:, 2:4], self.gpu_n)
+                wf0 = warp(f0, flow[:, :2], self.device)
+                wf1 = warp(f1, flow[:, 2:4], self.device)
                 fd, m0 = block[i](torch.cat((warped_img0[:, :3], warped_img1[:, :3], wf0, wf1, timestep, mask), 1), flow, scale=scale_list[i])
                 if ensemble:
                     f_, m_ = block[i](torch.cat((warped_img1[:, :3], warped_img0[:, :3], wf1, wf0, 1-timestep, -mask), 1), torch.cat((flow[:, 2:4], flow[:, :2]), 1), scale=scale_list[i])
@@ -141,8 +146,8 @@ class IFNet(nn.Module):
                 flow = flow + fd
             mask_list.append(mask)
             flow_list.append(flow)
-            warped_img0 = warp(img0, flow[:, :2], self.gpu_n)
-            warped_img1 = warp(img1, flow[:, 2:4], self.gpu_n)
+            warped_img0 = warp(img0, flow[:, :2], self.device)
+            warped_img1 = warp(img1, flow[:, 2:4], self.device)
             merged.append((warped_img0, warped_img1))
         mask = torch.sigmoid(mask)
         merged[3] = (warped_img0 * mask + warped_img1 * (1 - mask))
