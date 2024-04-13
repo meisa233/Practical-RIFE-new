@@ -11,8 +11,10 @@ import skvideo.io
 from queue import Queue, Empty
 from model.pytorch_msssim import ssim_matlab
 import traceback
+import time
 warnings.filterwarnings("ignore")
-
+print(time.time())
+import pdb
 def transferAudio(sourceVideo, targetVideo):
     import shutil
     import moviepy.editor
@@ -91,7 +93,7 @@ if torch.cuda.is_available():
     torch.backends.cudnn.benchmark = True
     if(args.fp16):
         torch.set_default_tensor_type(torch.cuda.HalfTensor)
-
+start_time = time.time()
 try:
     from train_log.RIFE_HDv3 import Model
 except:
@@ -104,6 +106,8 @@ model.load_model(args.modelDir, -1)
 print("Loaded 3.x/4.x HD model.")
 model.eval()
 model.device(gpu_n=args.gpu_n, mac=args.mac)
+end_time = time.time() 
+print(f'load model time:{end_time-start_time}')
 
 if not args.video is None:
     videoCapture = cv2.VideoCapture(args.video)
@@ -144,7 +148,7 @@ else:
         vid_out_name = args.output
     else:
         vid_out_name = '{}_{}X_{}fps.{}'.format(video_path_wo_ext, args.multi, int(np.round(args.fps)), args.ext)
-    vid_out = cv2.VideoWriter(vid_out_name, fourcc, args.fps, (w, h))
+    vid_out = cv2.VideoWriter(vid_out_name, fourcc, fps, (w, h))
 
 def clear_write_buffer(user_args, write_buffer):
     cnt = 0
@@ -284,12 +288,12 @@ while(not write_buffer.empty()):
 pbar.close()
 if not vid_out is None:
     vid_out.release()
-
+print(time.time())
 # move audio to new video file if appropriate
-if args.png == False and fpsNotAssigned == True and not args.video is None:
-    try:
-        transferAudio(args.video, vid_out_name)
-    except:
-        print("Audio transfer failed. Interpolated video will have no audio")
-        targetNoAudio = os.path.splitext(vid_out_name)[0] + "_noaudio" + os.path.splitext(vid_out_name)[1]
-        os.rename(targetNoAudio, vid_out_name)
+#if args.png == False and fpsNotAssigned == True and not args.video is None:
+#    try:
+#        transferAudio(args.video, vid_out_name)
+#    except:
+#        print("Audio transfer failed. Interpolated video will have no audio")
+#        targetNoAudio = os.path.splitext(vid_out_name)[0] + "_noaudio" + os.path.splitext(vid_out_name)[1]
+#        os.rename(targetNoAudio, vid_out_name)
