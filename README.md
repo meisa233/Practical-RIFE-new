@@ -77,7 +77,10 @@ v0.5 - 2023.12.26 | [Google Drive](https://drive.google.com/file/d/1OLO9hLV97ZQ4
 ```
 python3 inference_video_enhance.py --video=demo.mp4
 ```
-
+## Compile librgbqueue.so
+```
+g++ -shared -fPIC -finline-functions -ffast-math -ftree-vectorize -flto -O3 -o librgbqueue.so execute.cpp main.cpp
+```
 ## Citation
 
 ```
