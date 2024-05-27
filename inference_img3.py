@@ -29,7 +29,8 @@ dataptr1 = frame1.ctypes.data_as(c_char_p)
 dataptr2 = frame2.ctypes.data_as(c_char_p)
 
 ll = cdll.LoadLibrary
-lib = ctypes.cdll.LoadLibrary('./librgbqueue.so')
+#lib = ctypes.cdll.LoadLibrary('./librgbqueue.so')
+lib = ctypes.cdll.LoadLibrary('./librgbqueueyun.so')
 
 lib.TestReadFromFile.restype = c_int
 lib.TestReadFromFile.argtypes = [ctypes.c_char_p]
@@ -62,8 +63,8 @@ def init_log(log_name='inference', filemode='a', FileHandler=TimedRotatingFileHa
     logger.addHandler(fh)
     logger.addHandler(ch)
     return logger
-res = lib.TestReadFromFile('20240418_150354_001.mxf.rgb'.encode('utf-8'))
-res = lib.TestReadFromFile('20240418_150354_001.mxf.rgb'.encode('utf-8'))
+#res = lib.TestReadFromFile('20240418_150354_001.mxf.rgb'.encode('utf-8'))
+#res = lib.TestReadFromFile('20240418_150354_001.mxf.rgb'.encode('utf-8'))
 
 #res = lib.TestReadFromFile('split_red_1920x1080_rgb.rgb'.encode('utf-8'))
 #res = lib.TestReadFromFile('split_red_1920x1080_rgb.rgb'.encode('utf-8'))
@@ -75,15 +76,18 @@ def clear_write_buffer(write_buffer):
         start_time = time.time()
         item_number = item[0]
         item_frame = item[1]
-        pdb.set_trace()
+        #cv2.imwrite(f"./tmp/{item_number}_mid.png", item_frame[:,:,::-1])
+        #pdb.set_trace()
+        print(time.time(),"Converted array order before:", item_frame.flags['C_CONTIGUOUS'])  # 应该输出True
         dataptr3 = item_frame.ctypes.data_as(c_char_p) 
         lib.FinishFrameGenerate(dataptr3, item_number)
-        end_time = time.time()
+        end_time = time.time()        
+        print(time.time(),"Converted array order end:", item_frame.flags['C_CONTIGUOUS'])  # 应该输出True
 
         logger.info(f'send time:{end_time-start_time}')
         del dataptr3
         del item_frame
-        cv2.imwrite(f'processed__{count}.png', item[1][:,:,::-1])
+        #cv2.imwrite(f'processed__{count}.png', item[1][:,:,::-1])
         count += 1
         logger.info(f'processed {item_number} frame!')
 
@@ -130,6 +134,17 @@ if not hasattr(model, 'version'):
 model.eval()
 model.device(gpu_n=args.gpu_n)
 
+# start tcpserver
+lib.startTcpServerThread()
+
+size_ = lib.GetQueueSize()
+num = 0
+while size_ <= 0:
+    size_ = lib.GetQueueSize()
+    num += 1
+    logger.info(f'current size:{size_} sleeped {num} seconds')
+    time.sleep(1)
+
 def receive_server():
     i = args.start_number 
     while True:
@@ -138,11 +153,18 @@ def receive_server():
 
         while status1 != 0:
             status1 = lib.GetFrameMatrix(dataptr1, i)
-        pdb.set_trace()
+            #logger.info(f'can\'t get dataptr1! index{i}')
+            time.sleep(0.005)
+
+        #pdb.set_trace()
         status2 = lib.GetFrameMatrix(dataptr2, i+1)
         while status2 != 0: 
             status2 = lib.GetFrameMatrix(dataptr2, i + 1)
+            #logger.info(f'can\'t get dataptr2! index{i + 1}')
+            time.sleep(0.005)
 
+        #dataptr3 = frame1.ctypes.data_as(c_char_p)
+        #lib.FinishFrameGenerate(dataptr3, i)
 #        for h in range(1080):  # 高度
     # 在一行内生成所有相同高度的像素值列表
 #            row_pixels = ' '.join(str(frame1[h, w].tolist()) for w in range(1920))
@@ -150,10 +172,11 @@ def receive_server():
 #                 f.writelines([f'Height {h}: {row_pixels}\n'])
         end_time = time.time()
         logger.info(f'receive frames time:{end_time-start_time}')
+        #cv2.imwrite(f'./tmp/{i}_1.png', frame1[:,:,::-1]) 
+        #cv2.imwrite(f'./tmp/{i}_2.png', frame2[:,:,::-1])
         frames = np.stack([frame1, frame2], axis=0) 
         read_buffer.put([i,frames])
         i = i+gpu_count 
-        break
         
 _thread.start_new_thread(receive_server,())
 def pad_image(frame, padding):
@@ -175,7 +198,8 @@ def process_frames(frame1, frame2):
     ssim = ssim_matlab(I0_small[:, :3], I1_small[:, :3])
     if ssim > 0.996: print(ssim);return frame2
     if ssim < 0.2: print(ssim);return frame1
-    return (model.inference(I0, I1, 1./2, 1)[0]*255.).byte().cpu().numpy().transpose(1,2,0)[:h,:w] 
+    #return (model.inference(I0, I1, 1./2, 1)[0]*255.).byte().cpu().numpy().transpose(1,2,0)[:h,:w] 
+    return np.ascontiguousarray((model.inference(I0, I1, 1./2, 1)[0]*255.).byte().cpu().numpy().transpose(1,2,0)[:h,:w])
 
 while True:
     item = read_buffer.get()
@@ -184,6 +208,10 @@ while True:
     start_time = time.time()
     item_number = item[0]
     mid = process_frames(item[1][0], item[1][1])
+    #yuv = cv2.cvtColor(mid[:,:,::-1], cv2.COLOR_RGB2YUV_I420)
+    #yuv = yuv.tobytes()
+    #mid = item[1][0]
+    #cv2.imwrite(f"./tmp/{item_number}_mid.png", mid[:,:,::-1])
     end_time = time.time()
     logger.info(f'process time:{end_time-start_time}')
     write_buffer.put([item_number,mid])
