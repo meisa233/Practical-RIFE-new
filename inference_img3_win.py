@@ -17,35 +17,15 @@ import _thread
 from logging.handlers import TimedRotatingFileHandler 
 import pdb
 
-#import ctypes
-#from ctypes import *
-#logger = None
-#frame1 = np.empty([1080, 1920, 3], dtype=np.uint8)
-#frame2 = np.empty([1080, 1920, 3], dtype=np.uint8)
-#
-#rows, cols, chanel = frame1.shape
-#
-#dataptr1 = frame1.ctypes.data_as(c_char_p)
-#dataptr2 = frame2.ctypes.data_as(c_char_p)
-#
-#ll = cdll.LoadLibrary
-##lib = ctypes.cdll.LoadLibrary('./librgbqueue.so')
-#lib = ctypes.cdll.LoadLibrary('./librgbqueueyun.so')
-#
-#lib.TestReadFromFile.restype = c_int
-#lib.TestReadFromFile.argtypes = [ctypes.c_char_p]
-#
-#lib.GetQueueSize.restype = c_int
-#
-#lib.GetFrameMatrix.restype = c_int
-#lib.GetFrameMatrix.argtypes = [ctypes.c_char_p, ctypes.c_int]
-#
-#lib.FinishFrameGenerate.restype = c_int
-#lib.FinishFrameGenerate.argtypes = [ctypes.c_char_p, ctypes.c_int]
-
-
 write_buffer = Queue()
 read_buffer = Queue()
+
+width = 1920
+height = 1080
+y_size = width * height
+uv_size = y_size // 4 
+frame_size = y_size + 2 * uv_size
+
 
 def init_log(log_name='inference', filemode='a', FileHandler=TimedRotatingFileHandler, maxBytes=0):
     log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
@@ -63,11 +43,7 @@ def init_log(log_name='inference', filemode='a', FileHandler=TimedRotatingFileHa
     logger.addHandler(fh)
     logger.addHandler(ch)
     return logger
-#res = lib.TestReadFromFile('20240418_150354_001.mxf.rgb'.encode('utf-8'))
-#res = lib.TestReadFromFile('20240418_150354_001.mxf.rgb'.encode('utf-8'))
 
-#res = lib.TestReadFromFile('split_red_1920x1080_rgb.rgb'.encode('utf-8'))
-#res = lib.TestReadFromFile('split_red_1920x1080_rgb.rgb'.encode('utf-8'))
 def clear_write_buffer(write_buffer):
     count = 0
     wcount = 0
@@ -84,9 +60,6 @@ def clear_write_buffer(write_buffer):
         if item_number == start_number:
             f = open(item_output, 'wb') 
 
-        #print(time.time(),"Converted array order before:", item_frame.flags['C_CONTIGUOUS'])  # 应该输出True
-        #dataptr3 = item_frame.ctypes.data_as(c_char_p) 
-        #lib.FinishFrameGenerate(dataptr3, item_number)
         logger.info(f'item_number:{item_number}')
         for index, frame in enumerate(item_frames[:-1]):
             yuv = cv2.cvtColor(frame, cv2.COLOR_RGB2YUV_I420)
@@ -100,11 +73,8 @@ def clear_write_buffer(write_buffer):
             wcount += 1
             f.close()
         end_time = time.time()        
-        #print(time.time(),"Converted array order end:", item_frame.flags['C_CONTIGUOUS'])  # 应该输出True
 
         logger.info(f'send time:{end_time-start_time}')
-        #del dataptr3
-        #del item_frame
 
         count += 1
         logger.info(f'processed {item_number} frame!')
@@ -155,49 +125,45 @@ if not hasattr(model, 'version'):
 model.eval()
 model.device(gpu_n=args.gpu_n)
 
-## start tcpserver
-#lib.startTcpServerThread()
-#
-#size_ = lib.GetQueueSize()
-#num = 0
-#while size_ <= 0:
-#    size_ = lib.GetQueueSize()
-#    num += 1
-#    logger.info(f'current size:{size_} sleeped {num} seconds')
-#    time.sleep(1)
-
 def receive_server():
-    i = args.start_number 
-    start_number = 0
-    end_number = 598 
-    while True:
-        start_time = time.time() 
-#        status1 = lib.GetFrameMatrix(dataptr1, i) 
-#        while status1 != 0:
-#            status1 = lib.GetFrameMatrix(dataptr1, i)
-#            #logger.info(f'can\'t get dataptr1! index{i}')
-#            time.sleep(0.005)
-#
-#        #pdb.set_trace()
-#        status2 = lib.GetFrameMatrix(dataptr2, i+1)
-#        while status2 != 0: 
-#            status2 = lib.GetFrameMatrix(dataptr2, i + 1)
-#            #logger.info(f'can\'t get dataptr2! index{i + 1}')
-#            time.sleep(0.005)
 
-        #dataptr3 = frame1.ctypes.data_as(c_char_p)
-        #lib.FinishFrameGenerate(dataptr3, i)
-        filename = 'output.yuv'
-        frame1 = cv2.imread(f'./tmp_images2/{i}.png')[:,:,::-1]
-        frame2 = cv2.imread(f'./tmp_images2/{i+1}.png')[:,:,::-1]
+    filename1 = 'input.yuv'   
+    filename2 = 'input.yuv'
+
+    outputname = 'output_.yuv'
+
+    start_number = 20 
+    end_number = 620 
+
+    count = start_number
+    f = open(filename1, 'rb')    
+    f.seek(start_number * frame_size)
+    frame1 = f.read(width*height*3//2)
+    if len(frame1) < frame_size:
+        f.close() 
+        f = open(filename2, 'rb')
+        frame1 = f.read(width*height*3//2)
+    frame1 = np.frombuffer(frame1, dtype=np.uint8).reshape((height*3//2, width))
+    frame1 = cv2.cvtColor(frame1, cv2.COLOR_YUV2BGR_I420)
+    while True:
+        start_time = time.time()
+        frame2 = f.read(width*height*3//2) 
+        if len(frame2) < frame_size:
+            f.close()
+            f = open(filename2, 'rb')
+            frame2 = f.read(width*height*3//2) 
+        count += 1
+        frame2 = np.frombuffer(frame2, dtype=np.uint8).reshape((height*3//2, width))
+        frame2 = cv2.cvtColor(frame2, cv2.COLOR_YUV2BGR_I420)
+
         end_time = time.time()
         logger.info(f'receive frames time:{end_time-start_time}')
 
-        frames = np.stack([frame1, frame2], axis=0) 
-        read_buffer.put([filename, start_number, end_number, i, frames])
-
-        i = i+gpu_count 
-        if i == end_number+1:
+        frames = np.stack([frame1[:,:,::-1], frame2[:,:,::-1]], axis=0) 
+        read_buffer.put([outputname, start_number, end_number, count-1, frames])
+        frame1 = frame2.copy()
+        if count == end_number: 
+            f.close()
             break
         
 _thread.start_new_thread(receive_server,())
